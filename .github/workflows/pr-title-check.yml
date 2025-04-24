@@ -1,0 +1,36 @@
+name: "PR Title Validity Checker"
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract PR Branch Name
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          JIRA_ID=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
+          
+          if [[ -z "$JIRA_ID" ]]; then
+            echo "❌ No JIRA ID found in the branch name!"
+            COMMENT="🚨 PR title check failed: No JIRA ID found in branch name \`$BRANCH\`."
+            gh api repos/$REPO/issues/$PR_NUMBER/comments -f body="$COMMENT"
+            exit 1
+          fi
+          
+          TITLE_CONTAINS_ID=$(echo "$TITLE" | grep -oE "^$JIRA_ID - " || echo "")
+          
+          if [[ -z "$TITLE_CONTAINS_ID" ]]; then
+            echo "❌ PR title must start with '$JIRA_ID - '"
+            COMMENT="🚨 PR title check failed: The title should start with \`$JIRA_ID - \` (from branch name $BRANCH). 💡 Example: \`$JIRA_ID - Short description of change\`"
+            gh api repos/$REPO/issues/$PR_NUMBER/comments -f body="$COMMENT"
+            exit 1
+          fi
+          
+          echo "✅ PR title matches branch name"
